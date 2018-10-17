@@ -12,7 +12,10 @@ https://github.com/stevejenkins/unifi-linux-utils
 UniFi Controller SSL Certificate Import Script for Unix/Linux Systems
 by Steve Jenkins <http://www.stevejenkins.com/>
 
-Heavily modified by Screw Loose Dan 10/16/2018
+Also, bits of code copied from:
+ https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker
+
+Poorly patched together by Screw Loose Dan 10/16/2018
 
 # Usage
 
