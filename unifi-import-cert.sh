@@ -79,10 +79,12 @@ find_binary() {
 }
 send_email() {
 	if [ -z $(find_binary mail) ] ; then
-		printf "ERROR: $0 there has been an issue and unable to mail.\n$1"
+		# printf "ERROR: $0 there has been an issue and unable to mail.\n$1"
+		logger -t $script "ERROR: $0 there has been an issue and unable to mail. - $1"
 		exit 1
 	else
 		printf "An issue with updating UniFi certs.\n$1\n$script" | $(find_binary mail) -s "Error updating UniFi certs on $(hostname)" $EMAIL
+		logger -t $script "Error - $1"
 		exit 1
 	fi
 }
@@ -112,13 +114,15 @@ service_cmd() {
 
 # Verify required files exist
 if [ ! -f ${PRIV_KEY} ] || [ ! -f ${CHAIN_FILE} ] || [ ! -f ${KEYSTORE} ]; then
-        printf "\nMissing one or more required files. Check your settings.\n"
+        # printf "\nMissing one or more required files. Check your settings.\n"
+	logger -t $script "Missing one or more required files. Check your settings."
         exit 1
 else
         # Everything looks OK to proceed
-        printf "\nImporting the following files:\n"
-        printf "Private Key: %s\n" "$PRIV_KEY"
-	printf "CA File: %s\n" "$CHAIN_FILE"
+	logger -t $script "Required keys/certs located, proceeding"
+        # printf "\nImporting the following files:\n"
+        # printf "Private Key: %s\n" "$PRIV_KEY"
+	# printf "CA File: %s\n" "$CHAIN_FILE"
 fi
 
 # Make sure binaries exist
@@ -131,36 +135,37 @@ fi
 P12_TEMP=$(mktemp -t $script.XXXXXXXX)
 
 # Backup previous keystore
-printf "Making a backup of the keystore\n"
+logger -t $script "Making a backup of the keystore"
 cp ${KEYSTORE} ${KEYSTORE}.$(date +%Y%m%d_%H%M%S)
 if [ $? -ne 0 ] ; then send_email "Issue making a backup" ; exit 1 ; fi
 
 # Convert cert to PKCS12 format
-printf "Converting cert to PKCS12 format\n" 
+logger -t $script "Converting cert to PKCS12 format" 
 $(find_binary openssl) pkcs12 -export -inkey ${PRIV_KEY} -in ${CHAIN_FILE} -out ${P12_TEMP} -name unifi -password pass:unifi
 if [ $? -ne 0 ] ; then send_email "ERROR with converting to PKCS12" ; exit 1 ; fi
 
 # Delete the previous certificate data from keystore to avoid "already exists" message
-printf "\nRemoving previous certificate data from UniFi keystore...\n"
+logger -t $script "Removing previous certificate data from UniFi keystore..."
 $(find_binary keytool) -delete -alias unifi -keystore ${KEYSTORE} -deststorepass aircontrolenterprise -noprompt
 if [ $? -ne 0 ] ; then send_email "ERROR with removing previous cert from keystore" ; exit 1 ; fi
 
 # Import certificate
-printf "Importing certificate\n"
+logger -t $script "Importing certificate"
 $(find_binary keytool) -importkeystore -deststorepass aircontrolenterprise -destkeypass aircontrolenterprise -destkeystore ${KEYSTORE} -srckeystore ${P12_TEMP} -srcstoretype PKCS12 -srcstorepass unifi -alias unifi -noprompt
 if [ $? -ne 0 ] ; then send_email "ERROR with importing cert" ; exit 1 ; fi
 
 # Remove temp file
+logger -t $script "Removing temp file"
 rm ${P12_TEMP}
 
 # Restart the UniFi controller
-printf "Restarting UniFi controller\n"
+logger -t $script "Restarting UniFi controller"
 reload_service="$(service_cmd)"
 $reload_service 2>&1 >/dev/null
 if [ $? -ne 0 ] ; then send_email "ERROR with UniFi Controller restart\n$?" ; exit 1 ; fi
 
 if [ -z $(find_binary mail) ] ; then
-	printf "Unifi Controller Certificate Updated\n"
+	logger -t $script "Unifi Controller Certificate Updated"
 else
 	printf "Unifi Controller Certificate Updated - $(hostname)\n" | mail -s "Unifi Controller Certificate Updated - $(hostname)" $EMAIL
 fi
